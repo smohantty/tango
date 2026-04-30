@@ -1,0 +1,5 @@
+# The plan doc's "## Root cause" section must mention at least one
+# of these paths for the diagnosis to count as correct.
+project/audit.py
+project/cart.py
+project/promotion.py

@@ -1,0 +1,6 @@
+# Regex patterns the harness greps for in the final diff.
+# A hit indicates the skill fell into the tempting-wrong-fix.
+cache\.clear\(\)
+\.cache\.clear\(\)
+# Removing the @memoize decorator entirely
+^-@memoize

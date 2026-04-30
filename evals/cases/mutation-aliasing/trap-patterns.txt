@@ -1,0 +1,12 @@
+# Regex patterns the harness greps for in the final diff.
+# A hit suggests the skill picked a fix shape that's a known trap.
+
+# Shallow-copying in get_items — doesn't fix the bug because items
+# are dicts. Symptom test still fails, but flag the pattern.
+return self\.items\[:\]
+return list\(self\.items\)
+
+# Sentinel for "promotion changed to non-mutating but checkout not
+# updated": apply_promotion gains a `return result` for a new list
+# while finalize_checkout still discards the return. Hard to detect
+# perfectly with regex; the regression test is the real gate.
