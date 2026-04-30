@@ -8,21 +8,28 @@ produces high-quality bug fixes — not just symptom-passing ones.
 Each case lives in `cases/<name>/` and contains:
 
 ```
-project/                   buggy code
-tests/symptom/             FAIL before fix, PASS after  (proves the bug exists)
-tests/regression/          PASS before fix, PASS after  (catches "fixes" that break things)
-pytest.ini
-bug-report.md              what you paste to /tango-bug
+project/                   buggy code (copied to work dir)
+tests/                     existing project tests (copied to work dir)
+pytest.ini                 (copied to work dir)
+bug-report.md              1-2 lines, what you paste to /tango-bug (copied to work dir)
+_grader/symptom/           hidden — scorer-only tests that prove the bug is fixed
 ground-truth.md            the right fix + acceptable variants + traps
 ground-truth-files.txt     paths the plan's "Root cause" should mention
 trap-patterns.txt          regexes flagged in the final diff
 ```
 
-The two test suites are the real grading. Symptom tests confirm the
-fix lands; regression tests confirm it didn't ship at the cost of
-adjacent behavior. A "fix" that passes symptom but fails regression
-is the trap — exactly what the Codex review loop is supposed to
-catch.
+What the skill sees in the work dir: `project/`, `tests/`,
+`pytest.ini`, `bug-report.md`. Nothing else. It must reproduce the
+bug on its own and decide whether to add a regression test.
+
+What the scorer uses for grading: the work dir's `tests/` (any
+project test, including ones the skill added) PLUS the case dir's
+`_grader/symptom/` tests, which the scorer runs against the work
+dir's `project/` to confirm the bug is actually fixed.
+
+A "fix" that passes the grader's symptom tests but breaks the
+project tests is the trap — exactly what the Codex review loop is
+supposed to catch.
 
 ## Running a case
 
@@ -54,7 +61,8 @@ The scorer prints:
 - final `OVERALL: patch is correct/incorrect` verdict
 - which expected root-cause files the plan named
 - any trap-pattern regex matches in the final diff
-- symptom + regression test outcomes
+- new test files the skill added under `tests/`
+- grader symptom result + project tests result
 - a one-line OVERALL: PASS / TRAP / FAIL
 
 ## Cases
@@ -83,15 +91,21 @@ discarded — cart total stays at the original price.
 
 ## Adding a case
 
-1. Build a project where there's a real bug AND a tempting wrong fix.
-2. Write a symptom test that fails on the bug.
-3. Write a regression test that passes pre-fix and would fail under
-   the trap fix. **This is the most important step** — without it,
-   your case can't distinguish good fixes from bad.
-4. Verify the wiring with `pytest tests/symptom` (fails) and
-   `pytest tests/regression` (passes) on the buggy project.
-5. Write `ground-truth.md`, `ground-truth-files.txt`,
-   `trap-patterns.txt`, and `bug-report.md`.
+1. Build a `project/` where there's a real bug AND a tempting wrong fix.
+2. Put existing project tests under `tests/` for adjacent functionality
+   that the trap fix would break. These must pass on the buggy project
+   and would fail under the trap. **This is the most important step** —
+   without these tests, the case can't distinguish good fixes from
+   bad.
+3. Put grader symptom tests under `_grader/symptom/` — these are
+   hidden from the skill and only run by the scorer. They must fail
+   on the buggy project and pass after the correct fix.
+4. Verify wiring on the buggy project:
+   - `pytest tests` → passes
+   - `PYTHONPATH=. pytest _grader/symptom` → fails
+5. Write `bug-report.md` (1–2 lines, no reproducer, no test paths),
+   `ground-truth.md`, `ground-truth-files.txt`, and
+   `trap-patterns.txt`.
 
 ## What the eval does NOT do (yet)
 

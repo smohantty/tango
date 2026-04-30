@@ -4,7 +4,11 @@
 Reads:
   - The work dir's git diff vs the initial commit (the skill's fix)
   - The plan doc (./bug-*.md, excluding bug-report.md) for iteration history
-  - Runs symptom + regression tests
+  - Runs grader symptom tests (from the case dir's _grader/symptom/, run
+    against the work dir's project/) — these prove the bug is fixed.
+  - Runs the work dir's tests/ — these include any pre-existing project
+    tests AND any new tests the skill added. They prove no regression
+    AND signal whether the skill added a regression test for this bug.
   - Greps the diff for known trap patterns
   - Checks the plan's "Root cause" section for expected file paths
 
@@ -36,13 +40,29 @@ def _pytest_cmd() -> list[str]:
     return ["python3", "-m", "pytest"]
 
 
-def run_pytest(test_dir: Path, work_dir: Path) -> tuple[bool, str]:
-    """Run pytest on a directory, return (passed, combined output)."""
+def run_pytest(test_dir: Path, work_dir: Path, pin_to_work_dir: bool = False) -> tuple[bool, str]:
+    """Run pytest on a directory, return (passed, combined output).
+
+    `work_dir` is the cwd. When `pin_to_work_dir` is True (used for grader
+    tests that live outside the work dir), pytest's rootdir and config are
+    pinned to the work dir so that `pythonpath = .` in the work dir's
+    pytest.ini resolves the work dir's `project/` — not whatever pytest.ini
+    happens to sit upstream of the grader test path.
+    """
     if not test_dir.exists():
         return True, "(no tests)"
     cmd = [*_pytest_cmd(), str(test_dir), "-q", "--tb=short", "--no-header"]
+    if pin_to_work_dir:
+        cmd.extend(["--rootdir", str(work_dir), "-c", str(work_dir / "pytest.ini")])
     result = subprocess.run(cmd, cwd=work_dir, capture_output=True, text=True)
     return result.returncode == 0, result.stdout + result.stderr
+
+
+def list_test_files(test_dir: Path) -> set[str]:
+    """Relative paths of test_*.py files under test_dir."""
+    if not test_dir.exists():
+        return set()
+    return {str(p.relative_to(test_dir)) for p in test_dir.rglob("test_*.py")}
 
 
 def get_diff(work_dir: Path) -> str:
@@ -140,30 +160,38 @@ def main() -> int:
     trap_hits = [p for p in trap_patterns if re.search(p, diff)]
     print(f"trap patterns:      {trap_hits if trap_hits else 'clean'}")
 
-    symptom_pass, symptom_out = run_pytest(args.work_dir / "tests" / "symptom", args.work_dir)
-    regression_pass, regression_out = run_pytest(args.work_dir / "tests" / "regression", args.work_dir)
-    print(f"symptom tests:      {'PASS' if symptom_pass else 'FAIL'}")
-    print(f"regression tests:   {'PASS' if regression_pass else 'FAIL'}")
+    initial_tests = load_lines(args.case_dir / "tests-initial.txt")
+    if not initial_tests:
+        initial_tests = sorted(list_test_files(args.case_dir / "tests"))
+    work_tests = sorted(list_test_files(args.work_dir / "tests"))
+    new_tests = [t for t in work_tests if t not in initial_tests]
+    print(f"new test files:     {new_tests if new_tests else 'none'}")
+
+    grader_symptom = args.case_dir / "_grader" / "symptom"
+    symptom_pass, symptom_out = run_pytest(grader_symptom, args.work_dir, pin_to_work_dir=True)
+    project_tests_pass, project_tests_out = run_pytest(args.work_dir / "tests", args.work_dir)
+    print(f"symptom (grader):   {'PASS' if symptom_pass else 'FAIL'}")
+    print(f"project tests:      {'PASS' if project_tests_pass else 'FAIL'}")
 
     if not symptom_pass:
-        print("\n--- symptom output ---")
+        print("\n--- grader symptom output ---")
         print(symptom_out.rstrip())
-    if not regression_pass:
-        print("\n--- regression output ---")
-        print(regression_out.rstrip())
+    if not project_tests_pass:
+        print("\n--- project tests output ---")
+        print(project_tests_out.rstrip())
 
     print()
-    if symptom_pass and regression_pass and not trap_hits:
+    if symptom_pass and project_tests_pass and not trap_hits:
         print("OVERALL: PASS")
         return 0
-    if symptom_pass and not regression_pass:
-        print("OVERALL: TRAP — symptom fixed but regression broken")
+    if symptom_pass and not project_tests_pass:
+        print("OVERALL: TRAP — symptom fixed but project tests broken")
         return 1
     if symptom_pass and trap_hits:
         print("OVERALL: TRAP — symptom fixed but trap pattern matched in diff")
         return 1
     if not symptom_pass:
-        print("OVERALL: FAIL — symptom test still failing")
+        print("OVERALL: FAIL — bug not fixed (grader symptom test still failing)")
         return 1
     print("OVERALL: UNKNOWN")
     return 1

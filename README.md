@@ -26,10 +26,22 @@ live.
 ## Run an eval
 
 The eval harness measures whether `tango-bug` produces a high-quality
-fix — not just one that passes the obvious test. Each case ships with
-a *symptom* test (fails before the fix) and a *regression* test
-(passes before the fix, designed to fail under a tempting wrong fix).
-A good fix passes both.
+fix — not just one that passes the obvious test.
+
+A user gives the skill a 1–2 line bug report (no reproducer, no test
+paths). The skill must reproduce the bug on its own, find the root
+cause, fix it, and — when feasible — add a regression test. The
+harness then scores the result against hidden grader tests it never
+shows the skill.
+
+Each case ships with:
+- a buggy `project/`
+- existing `tests/` (tests for adjacent functionality the skill must
+  not break — these guard against trap fixes)
+- a hidden `_grader/symptom/` directory (used only by the scorer to
+  prove the bug is fixed)
+- a 1–2 line `bug-report.md` (what you paste to the skill)
+- ground-truth metadata for scoring
 
 Requires `pytest`. If it isn't on `PATH`, set `PYTEST=/path/to/pytest`.
 
@@ -64,13 +76,17 @@ The scorer prints, in order:
 - the final `OVERALL: patch is correct/incorrect` from Codex
 - which expected root-cause file paths the plan named
 - any trap-pattern regex hits in the final diff
-- symptom + regression test results
+- new test files the skill added under `tests/`
+- grader symptom test result (proves the bug is fixed)
+- project test result (existing `tests/` plus any new tests the
+  skill added — must all pass)
 - a one-line `OVERALL: PASS / TRAP / FAIL`
 
-`PASS` means the symptom is fixed AND the regression test still
-passes AND no trap pattern matched. `TRAP` means the symptom test
-passes but a regression broke (or a trap pattern matched) — exactly
-the failure mode the Codex review loop is supposed to catch.
+`PASS` = grader symptoms PASS + project tests PASS + no trap
+pattern. `TRAP` = grader symptoms pass but project tests broke or a
+trap pattern matched — exactly the failure mode the Codex review
+loop is supposed to catch. `FAIL` = grader symptoms still failing,
+i.e. the bug isn't actually fixed.
 
 ## Available cases
 

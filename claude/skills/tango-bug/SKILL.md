@@ -77,8 +77,18 @@ the implicated area, reproduce if you can. The output of this stage is a
 specific code-level claim — `file.ext:line`, a function name, the condition
 that produces the symptom — backed by evidence, not speculation.
 
-Ask the user when something critical is missing (no symptom, no repro, no
-hint where the code lives). One question at a time, plain text, no
+Bug reports are usually one or two lines. Don't expect a reproducer; produce
+your own. Look for an existing test you can extend, or the smallest script
+that triggers the symptom — whichever is cheaper.
+
+Also look at the **existing test coverage** for the affected code path: is
+there already a test that *should have* caught this? If yes, why didn't it
+— is the case missing, the assertion too loose, the test not run? If there
+is no test for this code path at all, note that — §2's Verification section
+will plan whether to add one.
+
+Ask the user when something critical is missing (no symptom, no hint where
+the code lives, ambiguous behavior). One question at a time, plain text, no
 multiple-choice unless the choice is genuinely close-ended.
 
 ## 2. Write the plan
@@ -120,7 +130,18 @@ At least one other approach you ruled out, with a one-line reason.
 
 ## Verification
 Exact repro steps that should now pass. Adjacent functionality worth
-regression-checking. Any new test that should be added.
+regression-checking.
+
+**Regression test plan.** Decide one of:
+- **Add new test** — if no existing test covers this bug AND a unit test
+  can cleanly capture it. State the file path and the specific
+  assertion(s) that would fail on the unfixed code and pass after the
+  fix.
+- **Extend existing test** — if a nearby test exists but missed this
+  case. State which test and what to add.
+- **No new test** — if the bug isn't unit-testable (real I/O, timing,
+  flaky external service, UI-only behavior). State the reason
+  explicitly so reviewers can challenge it.
 
 ## Risk
 What could break, blast radius, rollback story.
@@ -235,7 +256,22 @@ Once §3 exits clean:
 
 ## 5. Implement
 
-Apply the recommended fix as written in the plan. Keep the diff minimal:
+Apply the recommended fix as written in the plan, **plus the regression
+test the plan specified** (if any). Land the test and the fix in the same
+diff so Codex reviews them together — and so the test demonstrates the
+fix actually works.
+
+Suggested order:
+1. Write the new test (or extend the existing one) first. Run it; confirm
+   it fails on the unfixed code with the symptom you expect.
+2. Apply the fix. Run the test; confirm it now passes.
+3. Run the rest of the project's test suite to confirm no regression.
+
+If the plan said "no new test" with a justification, skip step 1 — but
+double-check the justification still holds after seeing the fix; sometimes
+the fix opens up a unit-testable surface that wasn't there before.
+
+Keep the diff minimal:
 
 - Don't bundle refactors, formatting changes, or unrelated fixes.
 - Don't add error handling, null-checks, or fallbacks for cases that can't
@@ -355,7 +391,9 @@ than mechanical reformatting), loop back to §6 — Codex hasn't reviewed
 those changes yet.
 
 Verify the fix per the plan's Verification section: run the repro, confirm
-the symptom is gone, run any tests the plan called for.
+the symptom is gone, run the new regression test (if the plan added one),
+and run the rest of the project's test suite to confirm no adjacent
+behavior regressed.
 
 ## 8. Fallbacks
 
